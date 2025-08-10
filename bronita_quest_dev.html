@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bronita: Queen of Night’s Quest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+html, body { margin:0; padding:0; height:100%; background:#000; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; overflow:hidden; }
+button { padding:10px 18px; font-size:16px; cursor:pointer; border-radius:10px; border:none; background:#ffd166; color:#1b1300; font-weight:700; }
+button:disabled { opacity:.45; cursor:not-allowed; filter:grayscale(1); }
+.screen { position:absolute; inset:0; display:none; }
+.screen.show { display:flex; }
+#titleScreen,#mapScreen,#sceneScreen,#statsScreen,#finalScreen { flex-direction:column; align-items:center; justify-content:center; }
+#sceneBackground { position:absolute; inset:0; background-size:cover; background-position:center; }
+#particlesCanvas { position:absolute; inset:0; pointer-events:none; }
+#sparkle { position:absolute; width:50px; height:50px; background:radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%); border-radius:50%; box-shadow:0 0 15px 5px rgba(255,255,255,0.6); cursor:pointer; z-index:10; display:none; animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%{transform:scale(1);opacity:1} 50%{transform:scale(1.18);opacity:.75} 100%{transform:scale(1);opacity:1} }
+#hud { position:absolute; top:10px; right:10px; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.15); padding:6px 10px; border-radius:12px; font-size:14px; }
+.hudItem { display:flex; align-items:center; gap:6px; padding:4px 8px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); border-radius:10px; }
+.hudQuest { max-width:40vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mapButtons { display:grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:10px; }
+#questText { margin:0 0 8px 0; opacity:.9; }
+#fadeOverlay { position:absolute; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .45s ease; }
+/* Mobile */ @media (max-width:768px){ h1{font-size:2.2em} h2{font-size:1.8em} #mapScreen{padding:0 16px} .mapButtons{grid-template-columns:1fr; gap:8px} .mapButtons button{width:100%; font-size:16px; padding:12px 18px} #questText{max-width:90vw} #hud{top:6px; right:6px; gap:4px; padding:4px 8px} .hudItem{gap:4px; padding:2px 6px} #hud .hudQuest{display:none} #statsScreen{font-size:1.2em} }
+</style>
+</head>
+<body>
+<section id="titleScreen" class="screen show">
+  <h1>Bronita: Queen of Night’s Quest</h1>
+  <button id="startBtn">Start Game</button>
+</section>
+<section id="mapScreen" class="screen">
+  <h2>Overworld Map</h2>
+  <p id="questText"></p>
+  <div class="mapButtons">
+    <button data-scene="0">Castle</button><button data-scene="1">Dark Forest</button>
+    <button data-scene="2">Cottage</button><button data-scene="3">Fountain</button>
+    <button data-scene="4">Forest</button><button data-scene="5">Night Lands</button>
+    <button data-scene="6">Snow Lands</button><button data-scene="7">Final Lemona</button>
+  </div>
+</section>
+<section id="sceneScreen" class="screen">
+  <div id="sceneBackground"></div>
+  <canvas id="particlesCanvas"></canvas>
+  <div id="sparkle" title="Catch the light!"></div>
+  <div id="hud">
+    <div class="hudItem">⭐ <span id="hudStars">0</span></div>
+    <div class="hudItem">❄ <span id="hudCrystals">0</span></div>
+    <div class="hudItem hudQuest" id="hudQuestText"></div>
+  </div>
+</section>
+<section id="statsScreen" class="screen">
+  <h2>Chapter Complete</h2>
+  <div>Stars this level: <b><span id="levelStars">0</span></b></div>
+  <div>Crystals this level: <b><span id="levelCrystals">0</span></b></div>
+  <div>Total Stars: <b><span id="totalStars">0</span></b></div>
+  <div>Total Crystals: <b><span id="totalCrystals">0</span></b></div>
+  <button id="continueBtn">Continue</button>
+</section>
+<section id="finalScreen" class="screen">
+  <h1>All Quests Complete!</h1>
+  <p>Lemona’s light mends the night. ✨</p>
+  <div style="display:flex; gap:8px;">
+    <button id="againBtn">Play Again</button>
+    <button id="resetBtn">Reset Progress</button>
+  </div>
+</section>
+<div id="fadeOverlay"></div>
+<script>
+const scenes=[
+ {bg:"castle.jpg",sound:"castle_night.mp3",type:null},
+ {bg:"dark_forest.jpg",sound:"dark_forest.mp3",type:null},
+ {bg:"cottage.jpg",sound:"cottage_magic.mp3",type:null},
+ {bg:"fountain.jpg",sound:"fountain_water.mp3",type:null},
+ {bg:"forest.jpg",sound:"forest_night.mp3",type:null},
+ {bg:"night_lands.jpg",sound:"night_lands_magic.mp3",type:"firefly",interaction:"sparkle"},
+ {bg:"snow_lands.jpg",sound:"snow_wind.mp3",type:"snow",interaction:"sparkle"},
+ {bg:"lemona.jpg",sound:"final_glow.mp3",type:null}
+];
+const quests=[
+ {targetScene:0,description:"Start your journey at the Castle."},
+ {targetScene:5,description:"Go to the Night Lands to find the Fireflies."},
+ {targetScene:6,description:"Travel to the Snow Lands to find the Snow Crystals."},
+ {targetScene:7,description:"Finally, enter the Final Lemona."}
+];
+const saveKey="bronita-quest-v2"; let state=loadState()||{stars:0,crystals:0,quest:0};
+const screens={title:document.getElementById('titleScreen'),map:document.getElementById('mapScreen'),scene:document.getElementById('sceneScreen'),stats:document.getElementById('statsScreen'),final:document.getElementById('finalScreen')};
+const questText=document.getElementById('questText'), hudStars=document.getElementById('hudStars'), hudCrystals=document.getElementById('hudCrystals'), hudQuestText=document.getElementById('hudQuestText'), sceneBg=document.getElementById('sceneBackground'), fadeEl=document.getElementById('fadeOverlay'), sparkleEl=document.getElementById('sparkle');
+const mapButtons=[...document.querySelectorAll('#mapScreen .mapButtons button')];
+let audio=null; function playAudio(p){stopAudio(); audio=new Audio(`sounds/${p}`); audio.loop=true; audio.volume=.85; audio.play().catch(()=>{});} function stopAudio(){if(audio){try{audio.pause()}catch(e){} audio=null;}}
+function saveState(){localStorage.setItem(saveKey,JSON.stringify(state));} function loadState(){try{return JSON.parse(localStorage.getItem(saveKey)||"");}catch(e){return null;}}
+function setScreen(w){Object.values(screens).forEach(s=>s.classList.remove('show')); w.classList.add('show');}
+function fade(on){fadeEl.style.opacity=on?1:0;}
+function updateHUD(){hudStars.textContent=state.stars; hudCrystals.textContent=state.crystals; hudQuestText.textContent=state.quest<quests.length?quests[state.quest].description:"All quests complete!";}
+document.getElementById('startBtn').addEventListener('click',()=>showMap());
+mapButtons.forEach(btn=>btn.addEventListener('click',()=>{const idx=Number(btn.dataset.scene); startScene(idx);}));
+function showMap(){stopAudio(); setScreen(screens.map); questText.textContent=state.quest<quests.length?quests[state.quest].description:"Congratulations! You have completed all quests!"; mapButtons.forEach(btn=>{const idx=Number(btn.dataset.scene); btn.disabled=state.quest<quests.length?(idx!==quests[state.quest].targetScene):true;});}
+let currentScene=0, particleType=null;
+const pCanvas=document.getElementById('particlesCanvas'), pctx=pCanvas.getContext('2d'); let pRAF=0, particles=[];
+function resizeParticles(){pCanvas.width=innerWidth; pCanvas.height=innerHeight;} addEventListener('resize',resizeParticles); resizeParticles();
+function startParticles(){ cancelAnimationFrame(pRAF); particles=[];
+ if(particleType==="firefly"){ for(let i=0;i<24;i++){particles.push({x:Math.random()*pCanvas.width,y:Math.random()*pCanvas.height,r:2,dx:(Math.random()-.5)*1,dy:(Math.random()-.5)*1,glow:.5+Math.random()*0.5});} }
+ else if(particleType==="snow"){ for(let i=0;i<90;i++){particles.push({x:Math.random()*pCanvas.width,y:Math.random()*pCanvas.height,r:1+Math.random()*2.5,dy:.6+Math.random()*1.2,drift:(Math.random()*0.6-0.3)});} }
+ const loop=()=>{ pctx.clearRect(0,0,pCanvas.width,pCanvas.height);
+  if(particleType==="firefly"){ particles.forEach(p=>{ p.x+=p.dx; p.y+=p.dy; if(p.x<0||p.x>pCanvas.width)p.dx*=-1; if(p.y<0||p.y>pCanvas.height)p.dy*=-1; const g=p.glow*(0.7+0.3*Math.sin((p.x+p.y)*0.01)); pctx.shadowBlur=10; pctx.shadowColor="rgba(255,255,150,.9)"; pctx.fillStyle=`rgba(255,255,150,${0.5+g*0.5})`; pctx.beginPath(); pctx.arc(p.x,p.y,p.r,0,Math.PI*2); pctx.fill(); pctx.shadowBlur=0; }); }
+  else if(particleType==="snow"){ pctx.fillStyle="rgba(255,255,255,.95)"; particles.forEach(p=>{ p.y+=p.dy; p.x+=p.drift; if(p.y>pCanvas.height){p.y=-5; p.x=Math.random()*pCanvas.width;} if(p.x<-5)p.x=pCanvas.width+5; if(p.x>pCanvas.width+5)p.x=-5; pctx.beginPath(); pctx.arc(p.x,p.y,p.r,0,Math.PI*2); pctx.fill(); }); }
+  pRAF=requestAnimationFrame(loop); }; loop(); }
+let sparkleX=innerWidth/2, sparkleY=innerHeight/2, sparkleDX=.55, sparkleDY=.45;
+function startSparkle(){ sparkleX=innerWidth/2; sparkleY=innerHeight/2; sparkleDX=(Math.random()<.5?-1:1)*.55; sparkleDY=(Math.random()<.5?-1:1)*.45; sparkleEl.style.display='block'; moveSparkle(); }
+function moveSparkle(){ sparkleX+=sparkleDX; sparkleY+=sparkleDY; if(sparkleX<30||sparkleX>innerWidth-80)sparkleDX*=-1; if(sparkleY<30||sparkleY>innerHeight-80)sparkleDY*=-1; sparkleEl.style.left=sparkleX+'px'; sparkleEl.style.top=sparkleY+'px'; if(sparkleEl.style.display==='block') requestAnimationFrame(moveSparkle); }
+sparkleEl.addEventListener('click',()=>{ new Audio('sounds/success_chime.mp3').play().catch(()=>{}); sparkleEl.style.display='none'; completeScene(); });
+function startScene(index){ if(state.quest<quests.length && index!==quests[state.quest].targetScene){ alert("This is not the right path. Follow your current quest!"); return; } currentScene=index; particleType=scenes[index].type; fade(true); setTimeout(()=>{ setScreen(screens.scene); sceneBg.style.backgroundImage=`url(images/${scenes[index].bg})`; updateHUD(); playAudio(scenes[index].sound); startParticles(); if(scenes[index].interaction==="sparkle") startSparkle(); else setTimeout(()=>completeScene(),3000); fade(false); },220); }
+function completeScene(){ stopAudio(); const gS=(particleType==="firefly")?5:0, gC=(particleType==="snow")?5:0; state.stars+=gS; state.crystals+=gC; if(state.quest<quests.length) state.quest++; saveState(); document.getElementById('levelStars').textContent=gS; document.getElementById('levelCrystals').textContent=gC; document.getElementById('totalStars').textContent=state.stars; document.getElementById('totalCrystals').textContent=state.crystals; setScreen(screens.stats); }
+document.getElementById('continueBtn').addEventListener('click',()=>{ if(state.quest>=quests.length) setScreen(screens.final); else showMap(); });
+document.getElementById('againBtn')?.addEventListener('click',()=>{ setScreen(screens.title); });
+document.getElementById('resetBtn')?.addEventListener('click',()=>{ state={stars:0,crystals:0,quest:0}; saveState(); setScreen(screens.title); });
+function boot(){ setScreen(screens.title); updateHUD(); } boot();
+</script>
+</body>
+</html>
