@@ -6,37 +6,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bronita: Queen of Night’s Quest</title>
 <style>
-  body, html {
-    margin: 0; padding: 0;
-    width: 100%; height: 100%;
-    font-family: Arial, sans-serif;
-    background: black; color: white;
-    overflow: hidden;
-  }
-  .screen { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; flex-direction: column; }
-  #mapScreen { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  #sceneBackground { position: absolute; top:0; left:0; width:100%; height:100%; background-size:cover; background-position:center; z-index:-1; }
-  #particlesCanvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
-  .mapButtons { display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .mapButtons button { padding: 10px 20px; font-size: 16px; }
-  #questText { margin-bottom: 10px; text-align:center; }
-  #hud { position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.5); padding:8px; border-radius:8px; }
-  .puzzleTarget { position: absolute; width: 50px; height: 50px;
-    background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
-    border-radius: 50%;
-    box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.6);
-    cursor: pointer;
-    z-index: 10;
-    display: none;
-  }
-  /* Mobile adjustments */
-  @media (max-width: 768px) {
-    h1 { font-size: 2.2em; }
-    h2 { font-size: 1.8em; }
-    .mapButtons { grid-template-columns: 1fr; gap: 8px; }
-    .mapButtons button { width: 100%; font-size: 16px; padding: 12px 18px; }
-    #hud { top: 6px; right: 6px; padding: 4px 8px; }
-  }
+  body, html { margin:0; padding:0; width:100%; height:100%; font-family: Arial, sans-serif; background:#000; color:#fff; overflow:hidden; }
+  .screen { display:none; width:100%; height:100%; align-items:center; justify-content:center; flex-direction:column; }
+  #mapScreen { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  #sceneBackground { position:absolute; inset:0; background-size:cover; background-position:center; z-index:-1; }
+  #particlesCanvas { position:absolute; inset:0; pointer-events:none; }
+  .mapButtons { display:grid; grid-template-columns:1fr; gap:10px; width:min(420px, 90vw); }
+  .mapButtons button { padding:12px 18px; font-size:18px; width:100%; }
+  #questText { margin-bottom: 10px; text-align:center; opacity:.9; }
+  #hud { position:absolute; top:10px; right:10px; background:rgba(0,0,0,.5); padding:8px; border-radius:8px; font-weight:600; }
+  .puzzleTarget { position:absolute; width:50px; height:50px; background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%); border-radius:50%; box-shadow:0 0 15px 6px rgba(255,255,255,.65); cursor:pointer; z-index:10; display:none; animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.18)} 100%{transform:scale(1)} }
 </style>
 </head>
 <body>
@@ -59,93 +39,75 @@
 <section id="sceneScreen" class="screen">
   <div id="sceneBackground"></div>
   <canvas id="particlesCanvas"></canvas>
-  <div id="sparkle" class="puzzleTarget"></div>
+  <div id="sparkle" class="puzzleTarget" title="Tap me!"></div>
   <div id="hud">Quest Progress</div>
 </section>
 
 <script>
 const quests = [
-    { targetScene: 0, description: "Start your journey at the Castle." },
-    { targetScene: 5, description: "Go to the Night Lands to find the Fireflies." },
-    { targetScene: 6, description: "Travel to the Snow Lands to find the Snow Crystals." },
-    { targetScene: 7, description: "Finally, enter the Final Lemona." }
+  { targetScene: 0, description: "Start your journey at the Castle." },
+  { targetScene: 5, description: "Go to the Night Lands to find the Fireflies." },
+  { targetScene: 6, description: "Travel to the Snow Lands to find the Snow Crystals." },
+  { targetScene: 7, description: "Finally, enter the Final Lemona." }
 ];
 let currentQuestIndex = 0;
-const scenes = [
-  { bg:"castle.jpg", sound:"castle_night.mp3", type:null },
-  { bg:"dark_forest.jpg", sound:"dark_forest.mp3", type:null },
-  { bg:"cottage.jpg", sound:"cottage_magic.mp3", type:null },
-  { bg:"fountain.jpg", sound:"fountain_water.mp3", type:null },
-  { bg:"forest.jpg", sound:"forest_night.mp3", type:null },
-  { bg:"night_lands.jpg", sound:"night_lands_magic.mp3", type:"firefly", interaction: "sparkle" },
-  { bg:"snow_lands.jpg", sound:"snow_wind.mp3", type:"snow", interaction: "sparkle" },
-  { bg:"lemona.jpg", sound:"final_glow.mp3", type:null }
-];
-let currentScene = 0;
-let particleType = null;
-let audio = null;
 
-function hideAll(){
-  document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
-}
-function playAudio(file){
-  if(audio) audio.pause();
-  audio = new Audio('sounds/' + file);
-  audio.loop = true;
-  audio.play();
-}
-function stopAudio(){
-  if(audio) audio.pause();
-}
+const scenes = [
+  { bg:"castle.jpg",       sound:"castle_night.mp3",      type:null },
+  { bg:"dark_forest.jpg",  sound:"dark_forest.mp3",       type:null },
+  { bg:"cottage.jpg",      sound:"cottage_magic.mp3",     type:null },
+  { bg:"fountain.jpg",     sound:"fountain_water.mp3",    type:null },
+  { bg:"forest.jpg",       sound:"forest_night.mp3",      type:null },
+  { bg:"night_lands.jpg",  sound:"night_lands_magic.mp3", type:"firefly", interaction:"sparkle" },
+  { bg:"snow_lands.jpg",   sound:"snow_wind.mp3",         type:"snow",    interaction:"sparkle" },
+  { bg:"lemona.jpg",       sound:"final_glow.mp3",        type:null }
+];
+
+let audio=null, currentScene=0, particleType=null;
+
+function hideAll(){ document.querySelectorAll('.screen').forEach(s=>s.style.display='none'); }
+function playAudio(file){ try{ if(audio) audio.pause(); audio=new Audio(file); audio.loop=true; audio.volume=.85; audio.play(); }catch(e){} }
+function stopAudio(){ try{ if(audio) audio.pause(); }catch(e){} }
+
 function showMap(){
-  stopAudio();
-  hideAll();
-  document.getElementById('mapScreen').style.display = 'flex';
-  const questText = document.getElementById('questText');
-  if (currentQuestIndex < quests.length) {
-    questText.innerText = quests[currentQuestIndex].description;
-  } else {
-    questText.innerText = "Congratulations! You have completed all quests!";
-  }
+  stopAudio(); hideAll(); document.getElementById('mapScreen').style.display='flex';
+  const questText=document.getElementById('questText');
+  if(currentQuestIndex<quests.length){ questText.textContent=quests[currentQuestIndex].description; }
+  else { questText.textContent="Congratulations! You have completed all quests!"; }
   document.querySelectorAll('#mapScreen button').forEach((button, index) => {
     if (currentQuestIndex < quests.length) {
       const targetScene = quests[currentQuestIndex].targetScene;
       button.disabled = (index !== targetScene);
-    } else {
-      button.disabled = true;
-    }
+    } else { button.disabled = true; }
   });
 }
+
 const sparkleEl = document.getElementById('sparkle');
 function startScene(index){
-  if (currentQuestIndex < quests.length) {
-    if (index !== quests[currentQuestIndex].targetScene) {
-      alert("This is not the right path. Follow your current quest!");
-      return;
-    }
+  if(currentQuestIndex<quests.length && index !== quests[currentQuestIndex].targetScene){
+    alert("This is not the right path. Follow your current quest!");
+    return;
   }
-  currentScene = index;
-  hideAll();
-  document.getElementById('sceneScreen').style.display = 'block';
-  document.getElementById('sceneBackground').style.backgroundImage = `url(images/${scenes[index].bg})`;
-  particleType = scenes[index].type;
+  currentScene=index; particleType=scenes[index].type;
+  hideAll(); document.getElementById('sceneScreen').style.display='block';
+  document.getElementById('sceneBackground').style.backgroundImage = `url(${scenes[index].bg})`;
   playAudio(scenes[index].sound);
   if (scenes[index].interaction === "sparkle") {
-    sparkleEl.style.left = `${Math.random() * (innerWidth - 60) + 30}px`;
-    sparkleEl.style.top = `${Math.random() * (innerHeight - 60) + 30}px`;
+    sparkleEl.style.left = `${Math.random()*(innerWidth-60)+30}px`;
+    sparkleEl.style.top  = `${Math.random()*(innerHeight-60)+30}px`;
     sparkleEl.style.display = 'block';
   } else {
-    setTimeout(() => { completeScene(); }, 3000);
+    setTimeout(()=>completeScene(), 2500);
   }
 }
+
 sparkleEl.addEventListener('click', ()=>{
-  sparkleEl.style.display = 'none';
+  sparkleEl.style.display='none';
   completeScene();
 });
-function completeScene(){
-  currentQuestIndex++;
-  showMap();
-}
+
+function completeScene(){ currentQuestIndex++; showMap(); }
+
 window.onload = showMap;
 </script>
 </body>
